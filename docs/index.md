@@ -4,6 +4,8 @@
 
 This documentation is the primary reference for project behavior and configuration. The repository `README.md` is intentionally concise and links here for details.
 
+Hosted site: https://seoldh99.github.io/tract7dt/
+
 ## What This Pipeline Does
 
 At a high level, `tract7dt run --config ...` executes:

@@ -1,11 +1,13 @@
 # tract7dt
 
+[![Docs](https://github.com/seoldh99/tract7dt/actions/workflows/docs.yml/badge.svg)](https://github.com/seoldh99/tract7dt/actions/workflows/docs.yml)
+
 7DT image-specific Tractor photometry pipeline.  
 This distribution is licensed under MIT.
 
 ## Documentation
 
-- GitHub Pages: https://seoldh99.github.io/tract7dt/
+- Live documentation: https://seoldh99.github.io/tract7dt/
 
 ## Installation
 
