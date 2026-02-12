@@ -5,6 +5,7 @@ import logging
 import os
 import multiprocessing as mp
 import queue as queue_mod
+import shutil
 import sys
 import time
 from dataclasses import dataclass
@@ -1108,6 +1109,7 @@ def build_epsf(
     # For parallel bands in an interactive terminal, render one live line per worker.
     use_inline_progress = sys.stderr.isatty() and (not bool(parallel_bands))
     use_worker_lines = sys.stderr.isatty() and bool(parallel_bands)
+    _inline_width = max(40, shutil.get_terminal_size((80, 24)).columns - 1)
 
     global _EPSF_IMAGE_DICT, _EPSF_CFG, _EPSF_GAIAXP, _EPSF_USE_GAIAXP, _EPSF_OUT_ROOT, _EPSF_ACTIVE_PATCHES
     _EPSF_IMAGE_DICT = image_dict
@@ -1162,7 +1164,7 @@ def build_epsf(
             f"patch_ok={patch_ok} patch_fail={patch_fail} eta={_format_eta(eta)}"
         )
         if use_inline_progress:
-            sys.stderr.write("\r" + msg)
+            sys.stderr.write("\r" + msg[:_inline_width].ljust(_inline_width))
             sys.stderr.flush()
         else:
             now = time.time()
@@ -1257,7 +1259,7 @@ def build_epsf(
                 notice = slot_notice.get(slot, "")
                 if notice:
                     line = f"{line} | {notice}"
-                sys.stderr.write("\r" + line.ljust(140) + "\n")
+                sys.stderr.write("\r" + line[:_inline_width].ljust(_inline_width) + "\n")
             sys.stderr.flush()
 
         _render_worker_lines()

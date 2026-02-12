@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     ap_bump.add_argument("--out", default="sample_config.yaml", help="Output path for sample config")
     ap_bump.add_argument("--force", action="store_true", help="Overwrite if output file exists")
 
-    ap_dl = sub.add_parser("download-sample-data", help="Download sample image data")
+    ap_dl = sub.add_parser("download-sample", help="Download sample image data")
     ap_dl.add_argument(
         "--dir",
         dest="download_dir",
@@ -71,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Wrote sample config: %s", out)
         return 0
 
-    if args.cmd == "download-sample-data":
+    if args.cmd == "download-sample":
         if args.download_dir:
             target_dir = Path(args.download_dir).expanduser()
             parent_dir = target_dir.parent

@@ -18,9 +18,9 @@ All pipeline commands require:
 ## Utility Commands
 
 - `dump-config`: write the sample config template
-- `download-sample-data`: download and unpack sample image data
+- `download-sample`: download and unpack sample image data
 
 ## Important Logging Note
 
 - Pipeline commands (`run*`, `merge`) apply logging from YAML (`logging.*`) after config load.
-- `download-sample-data` does not read `--config`; its logging setup is independent of YAML.
+- `download-sample` does not read `--config`; its logging setup is independent of YAML.

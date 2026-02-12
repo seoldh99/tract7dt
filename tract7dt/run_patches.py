@@ -9,6 +9,7 @@ import concurrent.futures as cf
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -146,6 +147,7 @@ def run_subprocesses(
     failures: list[dict] = []
     tstart = time.time()
     use_inline_progress = sys.stderr.isatty()
+    _inline_width = max(40, shutil.get_terminal_size((80, 24)).columns - 1)
 
     def _format_eta(seconds: float) -> str:
         if not (seconds >= 0) or seconds == float("inf"):
@@ -200,7 +202,7 @@ def run_subprocesses(
                 f"running={running} rate={rate:.2f}/s eta={_format_eta(eta)}"
             )
             if use_inline_progress:
-                sys.stderr.write("\r" + msg)
+                sys.stderr.write("\r" + msg[:_inline_width].ljust(_inline_width))
                 sys.stderr.flush()
             else:
                 now = time.time()

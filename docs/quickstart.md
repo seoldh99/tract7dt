@@ -42,13 +42,13 @@ tract7dt merge --config /path/to/config.yaml
 
 ```bash
 # default target folder under cwd
-tract7dt download-sample-data
+tract7dt download-sample
 
 # explicit target folder
-tract7dt download-sample-data --dir /path/to/dataset
+tract7dt download-sample --dir /path/to/dataset
 
 # overwrite existing target folder
-tract7dt download-sample-data --dir /path/to/dataset --force
+tract7dt download-sample --dir /path/to/dataset --force
 ```
 
 See [Sample Data](sample-data.md) for download behavior and terms.

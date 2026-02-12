@@ -86,13 +86,13 @@ tract7dt dump-config --force
 
 ```bash
 # Download under current directory with original dataset folder name.
-tract7dt download-sample-data
+tract7dt download-sample
 
 # Or set an explicit dataset directory path.
-tract7dt download-sample-data --dir "/path/to/sample_data_dir"
+tract7dt download-sample --dir "/path/to/sample_data_dir"
 
 # Overwrite an existing target dataset directory.
-tract7dt download-sample-data --dir "/path/to/sample_data_dir" --force
+tract7dt download-sample --dir "/path/to/sample_data_dir" --force
 ```
 
 Without `--dir`, the command creates the dataset under the current directory using the archive's original dataset folder name.  

@@ -523,6 +523,9 @@ def load_inputs(cfg: dict) -> dict:
 
     _log(f"White made: {white.shape}")
 
+    n_crop_excluded = 0
+    sat_removed_catalog = None
+
     if crop_cfg.get("enabled", True):
         t0_crop = time.perf_counter()
         CROP_MARGIN = int(crop_cfg.get("margin", 500))
@@ -598,6 +601,7 @@ def load_inputs(cfg: dict) -> dict:
             exclusion_flags["excluded_crop"] = exclusion_flags["excluded_crop"] | exclusion_flags["__excluded_crop"].fillna(False)
             exclusion_flags = exclusion_flags.drop(columns=["__excluded_crop"])
         input_catalog = input_catalog.loc[keep].copy().reset_index(drop=True)
+        n_crop_excluded = n0 - len(input_catalog)
         _log(f"input_catalog: {n0} -> {len(input_catalog)} rows after crop filtering")
 
         white = np.asarray(white)[y0:y1, x0:x1]
@@ -684,6 +688,7 @@ def load_inputs(cfg: dict) -> dict:
                     exclusion_flags["excluded_saturation"] | exclusion_flags["__excluded_saturation"].fillna(False)
                 )
                 exclusion_flags = exclusion_flags.drop(columns=["__excluded_saturation"])
+        sat_removed_catalog = input_catalog.loc[sat_removed_mask].copy()
         input_catalog = filtered_catalog
         t_sat = time.perf_counter() - t0_sat
 
@@ -718,6 +723,26 @@ def load_inputs(cfg: dict) -> dict:
         is_star = type_ok == "STAR"
         is_gal = np.isin(type_ok, ["GAL", "EXP", "DEV", "SERSIC"])
         is_unknown = ~(is_star | is_gal)
+
+        # Sources with NaN coords or projecting outside image bounds (from surviving catalog)
+        n_nan_or_oob = int(len(input_catalog)) - int(inb.sum())
+
+        # -- Saturation-excluded sources (plot with distinct marker) --
+        x_sat = np.array([], dtype=float)
+        y_sat = np.array([], dtype=float)
+        n_sat_excluded = 0
+        if sat_removed_catalog is not None and len(sat_removed_catalog) > 0:
+            _sat_ra = pd.to_numeric(sat_removed_catalog[ra_col], errors="coerce").to_numpy(dtype=float)
+            _sat_dec = pd.to_numeric(sat_removed_catalog[dec_col], errors="coerce").to_numpy(dtype=float)
+            _sat_ok = np.isfinite(_sat_ra) & np.isfinite(_sat_dec)
+            if np.any(_sat_ok):
+                _sx, _sy = wcs_white.all_world2pix(_sat_ra[_sat_ok], _sat_dec[_sat_ok], 0)
+                _sx = np.asarray(_sx, dtype=float)
+                _sy = np.asarray(_sy, dtype=float)
+                _sinb = (_sx >= 0) & (_sx < W) & (_sy >= 0) & (_sy < H)
+                x_sat = _sx[_sinb]
+                y_sat = _sy[_sinb]
+            n_sat_excluded = int(len(sat_removed_catalog))
 
         DS_FULL = int(crop_cfg.get("overlay_downsample_full", 1))
 
@@ -784,6 +809,33 @@ def load_inputs(cfg: dict) -> dict:
                     label=f"UNKNOWN (N={is_unknown.sum()})\n(Fallback to {fallback_model})",
                     transform=ax.get_transform("pixel"),
                 )
+
+            # Saturation-excluded sources (plotted with distinct marker)
+            if len(x_sat) > 0:
+                ax.scatter(
+                    x_sat,
+                    y_sat,
+                    s=60,
+                    color="red",
+                    linewidths=1.2,
+                    marker="x",
+                    zorder=5,
+                    label=f"Sat-excl (N={n_sat_excluded})",
+                    transform=ax.get_transform("pixel"),
+                )
+            elif n_sat_excluded > 0:
+                # All fell outside bounds; add legend-only entry
+                ax.plot([], [], "rx", markersize=6, label=f"Sat-excl (N={n_sat_excluded})")
+
+            # Crop-excluded sources (legend only; positions outside cropped image)
+            if n_crop_excluded > 0:
+                ax.plot([], [], "o", mfc="none", mec="gray", markersize=5,
+                        label=f"Crop-excl (N={n_crop_excluded})")
+
+            # Sources with NaN coords or out-of-bounds projection (legend only)
+            if n_nan_or_oob > 0:
+                ax.plot([], [], "d", mfc="none", mec="gray", markersize=4,
+                        label=f"NaN/OOB (N={n_nan_or_oob})")
 
             ax.set_xlim(*xlim)
             ax.set_ylim(*ylim)

@@ -48,12 +48,12 @@ Overlay type grouping:
 
 Fitting fallback model for unknown/missing types is `patch_run.gal_model`.
 
-## `download-sample-data` logging differs from pipeline logging
+## `download-sample` logging differs from pipeline logging
 
 This is expected:
 
 - pipeline commands apply YAML logging config
-- `download-sample-data` runs without `--config`
+- `download-sample` runs without `--config`
 
 ## Merge rows with no fit values
 

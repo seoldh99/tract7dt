@@ -110,6 +110,7 @@ def _download_url(url: str, out_path: Path) -> None:
         next_log_bytes = 50 * _MIB
         logged_completion = False
         use_inline_progress = sys.stderr.isatty()
+        _inline_width = max(40, shutil.get_terminal_size((80, 24)).columns - 1)
         last_render = 0.0
         last_pct = -1
 
@@ -131,10 +132,10 @@ def _download_url(url: str, out_path: Path) -> None:
                     # Refresh in-place roughly 5 times/sec or on completion.
                     if pct != last_pct and (now - last_render >= 0.2 or pct >= 100):
                         msg = (
-                            f"\rDownload [{_progress_bar(pct)}] {pct:3d}% "
+                            f"Download [{_progress_bar(pct)}] {pct:3d}% "
                             f"({written / _MIB:.1f}/{total_bytes / _MIB:.1f} MiB)"
                         )
-                        sys.stderr.write(msg)
+                        sys.stderr.write("\r" + msg[:_inline_width].ljust(_inline_width))
                         sys.stderr.flush()
                         last_render = now
                         last_pct = pct
@@ -153,8 +154,8 @@ def _download_url(url: str, out_path: Path) -> None:
                         logged_completion = True
             elif written >= next_log_bytes:
                 if use_inline_progress:
-                    msg = f"\rDownload [unknown size] {written / _MIB:.1f} MiB downloaded"
-                    sys.stderr.write(msg)
+                    msg = f"Download [unknown size] {written / _MIB:.1f} MiB downloaded"
+                    sys.stderr.write("\r" + msg[:_inline_width].ljust(_inline_width))
                     sys.stderr.flush()
                 else:
                     _LOG.info("Download [unknown size] %.1f MiB downloaded", written / _MIB)
@@ -163,10 +164,10 @@ def _download_url(url: str, out_path: Path) -> None:
         if total_bytes and not logged_completion:
             if use_inline_progress:
                 msg = (
-                    f"\rDownload [{_progress_bar(100)}] 100% "
+                    f"Download [{_progress_bar(100)}] 100% "
                     f"({written / _MIB:.1f}/{total_bytes / _MIB:.1f} MiB)"
                 )
-                sys.stderr.write(msg)
+                sys.stderr.write("\r" + msg[:_inline_width].ljust(_inline_width))
                 sys.stderr.flush()
             else:
                 _LOG.info(
@@ -212,24 +213,64 @@ def _extract_archive(archive: Path, extract_root: Path) -> Path:
         if not str(resolved).startswith(str(root)):
             raise RuntimeError(f"Unsafe archive path detected: {candidate}")
 
+    use_inline = sys.stderr.isatty()
+    _inline_width = max(40, shutil.get_terminal_size((80, 24)).columns - 1)
+    last_non_tty_log = 0.0
+
+    def _progress_bar(done: int, total: int, width: int = 24) -> str:
+        if total <= 0:
+            return "-" * width
+        frac = max(0.0, min(1.0, float(done) / float(total)))
+        filled = int(round(frac * width))
+        return "#" * filled + "-" * (width - filled)
+
+    def _emit_extract_progress(done: int, total: int, *, force_log: bool = False) -> None:
+        nonlocal last_non_tty_log
+        msg = (
+            f"Unpack [{_progress_bar(done, total)}] "
+            f"{done}/{total} files"
+        )
+        if use_inline:
+            sys.stderr.write("\r" + msg[:_inline_width].ljust(_inline_width))
+            sys.stderr.flush()
+        else:
+            now = time.monotonic()
+            if force_log or (now - last_non_tty_log) >= 10.0:
+                _LOG.info(msg)
+                last_non_tty_log = now
+
     lower = archive.name.lower()
     roots: set[str]
     if lower.endswith(".zip"):
         roots = _archive_roots_zip(archive)
         with zipfile.ZipFile(archive, "r") as zf:
-            for member in zf.namelist():
+            members = zf.namelist()
+            for member in members:
                 _assert_safe_path(extract_root / member)
-            zf.extractall(extract_root)
+            total = len(members)
+            _emit_extract_progress(0, total, force_log=True)
+            for i, member in enumerate(members, 1):
+                zf.extract(member, extract_root)
+                _emit_extract_progress(i, total, force_log=(i == total))
     elif lower.endswith(".tar") or lower.endswith(".tar.gz") or lower.endswith(".tgz"):
         roots = _archive_roots_tar(archive)
         with tarfile.open(archive, "r:*") as tf:
-            for member in tf.getmembers():
+            members = tf.getmembers()
+            for member in members:
                 _assert_safe_path(extract_root / member.name)
-            tf.extractall(extract_root)
+            total = len(members)
+            _emit_extract_progress(0, total, force_log=True)
+            for i, member in enumerate(members, 1):
+                tf.extract(member, extract_root)
+                _emit_extract_progress(i, total, force_log=(i == total))
     else:
         raise RuntimeError(
             "Sample data archive must be one of .zip/.tar/.tar.gz/.tgz"
         )
+
+    if use_inline:
+        sys.stderr.write("\n")
+        sys.stderr.flush()
 
     if len(roots) == 1:
         ds_name = next(iter(roots))
@@ -335,6 +376,17 @@ def download_sample_data(
     download_root.mkdir(parents=True, exist_ok=True)
     filename = _infer_filename(url)
     archive_path = download_root / filename
+
+    # Pre-download check: fail fast if target already exists.
+    if target_dataset_dir is not None:
+        _pre_check = target_dataset_dir.expanduser().resolve()
+    else:
+        _pre_check = (download_root / _dataset_name_from_filename(filename)).resolve()
+    if _pre_check.exists() and not overwrite:
+        raise RuntimeError(
+            f"Target dataset directory already exists: {_pre_check}. "
+            "Use --force to overwrite."
+        )
 
     if archive_path.exists():
         if archive_path.is_dir():

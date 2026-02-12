@@ -5,6 +5,7 @@ import gzip
 import json
 import logging
 import pickle
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -48,8 +49,9 @@ def build_patch_inputs(
     PROGRESS_EVERY = max(1, N_TOTAL // 20)
     use_inline_progress = sys.stderr.isatty()
     tstart = time.time()
-    last_non_tty_log = 0.0
-    inline_width = 160
+    last_non_tty_log_build = 0.0
+    last_non_tty_log_write = 0.0
+    inline_width = max(40, shutil.get_terminal_size((80, 24)).columns - 1)
 
     def _progress_bar(done: int, total: int, width: int = 24) -> str:
         if total <= 0:
@@ -59,23 +61,23 @@ def build_patch_inputs(
         return "#" * filled + "-" * (width - filled)
 
     def _emit_processing_progress(*, force_log: bool = False, queued_writes: int = 0) -> None:
-        nonlocal last_non_tty_log
+        nonlocal last_non_tty_log_build
         msg = (
             f"Patch inputs build [{_progress_bar(N_DONE, N_TOTAL)}] "
             f"{N_DONE}/{N_TOTAL} keep={N_KEEP} skip={N_SKIP} queued={queued_writes} "
             f"(total_patches={N_TOTAL})"
         )
         if use_inline_progress:
-            sys.stderr.write("\r" + msg.ljust(inline_width))
+            sys.stderr.write("\r" + msg[:inline_width].ljust(inline_width))
             sys.stderr.flush()
         else:
             now = time.time()
-            if force_log or (now - last_non_tty_log) >= 10.0:
+            if force_log or (now - last_non_tty_log_build) >= 10.0:
                 logger.info(msg)
-                last_non_tty_log = now
+                last_non_tty_log_build = now
 
     def _emit_write_progress(*, done_write: int, total_write: int, force_log: bool = False) -> None:
-        nonlocal last_non_tty_log
+        nonlocal last_non_tty_log_write
         elapsed = max(1e-6, time.time() - tstart)
         rate = done_write / elapsed
         msg = (
@@ -84,13 +86,13 @@ def build_patch_inputs(
             f"(kept={total_write} total={N_TOTAL})"
         )
         if use_inline_progress:
-            sys.stderr.write("\r" + msg.ljust(inline_width))
+            sys.stderr.write("\r" + msg[:inline_width].ljust(inline_width))
             sys.stderr.flush()
         else:
             now = time.time()
-            if force_log or (now - last_non_tty_log) >= 10.0:
+            if force_log or (now - last_non_tty_log_write) >= 10.0:
                 logger.info(msg)
-                last_non_tty_log = now
+                last_non_tty_log_write = now
 
     cols = list(input_catalog.columns)
     col_map = {str(c).strip().lower(): str(c) for c in cols}
@@ -210,7 +212,10 @@ def build_patch_inputs(
                 if built is None:
                     N_SKIP += 1
                     if (N_DONE % PROGRESS_EVERY) == 0 or N_DONE == N_TOTAL:
-                        _emit_processing_progress(force_log=True, queued_writes=len(futs))
+                        _emit_processing_progress(
+                            force_log=(N_DONE == N_TOTAL),
+                            queued_writes=len(futs),
+                        )
                     continue
                 meta, payload = built
                 patch_inputs.append(meta)
@@ -220,7 +225,10 @@ def build_patch_inputs(
                 futs[ex.submit(_write_payload, meta, payload)] = meta["patch_tag"]
 
                 if (N_DONE % PROGRESS_EVERY) == 0 or N_DONE == N_TOTAL:
-                    _emit_processing_progress(force_log=True, queued_writes=len(futs))
+                    _emit_processing_progress(
+                        force_log=(N_DONE == N_TOTAL),
+                        queued_writes=len(futs),
+                    )
 
             ndone_w = 0
             pending = set(futs.keys())
@@ -234,7 +242,11 @@ def build_patch_inputs(
                 for fut in done_now:
                     _ = fut.result()
                     ndone_w += 1
-                _emit_write_progress(done_write=ndone_w, total_write=total_writes, force_log=True)
+                _emit_write_progress(
+                    done_write=ndone_w,
+                    total_write=total_writes,
+                    force_log=(ndone_w == total_writes),
+                )
     else:
         _emit_processing_progress(force_log=True, queued_writes=0)
         for pdef in patch_defs:
@@ -243,7 +255,7 @@ def build_patch_inputs(
             if built is None:
                 N_SKIP += 1
                 if (N_DONE % PROGRESS_EVERY) == 0 or N_DONE == N_TOTAL:
-                    _emit_processing_progress(force_log=True, queued_writes=0)
+                    _emit_processing_progress(force_log=(N_DONE == N_TOTAL), queued_writes=0)
                 continue
 
             meta, payload = built
@@ -256,7 +268,7 @@ def build_patch_inputs(
                 _ = _write_payload(meta, payload)
 
             if (N_DONE % PROGRESS_EVERY) == 0 or N_DONE == N_TOTAL:
-                _emit_processing_progress(force_log=True, queued_writes=0)
+                _emit_processing_progress(force_log=(N_DONE == N_TOTAL), queued_writes=0)
 
     if use_inline_progress:
         sys.stderr.write("\n")

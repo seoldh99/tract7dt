@@ -1,13 +1,13 @@
 # Sample Data
 
-`download-sample-data` downloads and prepares a sample dataset package.
+`download-sample` downloads and prepares a sample dataset package.
 
 ## Command
 
 ```bash
-tract7dt download-sample-data
-tract7dt download-sample-data --dir /path/to/dataset
-tract7dt download-sample-data --dir /path/to/dataset --force
+tract7dt download-sample
+tract7dt download-sample --dir /path/to/dataset
+tract7dt download-sample --dir /path/to/dataset --force
 ```
 
 ## Behavior
@@ -34,7 +34,7 @@ So users do not retain `.tar.gz` leftovers by default.
 
 ## Logging Scope Caveat
 
-`download-sample-data` does not take `--config`, so pipeline YAML logging settings are not applied directly to this command.
+`download-sample` does not take `--config`, so pipeline YAML logging settings are not applied directly to this command.
 
 ## Source Configuration
 
