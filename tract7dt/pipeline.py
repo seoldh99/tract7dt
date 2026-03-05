@@ -352,8 +352,16 @@ def load_inputs(cfg: dict) -> dict:
     outputs = cfg["outputs"]
     checks = cfg["checks"]
     crop_cfg = cfg["crop"]
+    overlay_cfg = cfg.get("overlay", {})
     sat_cut_cfg = cfg.get("source_saturation_cut", {})
     perf_cfg = cfg.get("performance", {})
+    overlay_enabled = bool(overlay_cfg.get("enabled", True))
+    overlay_downsample_full = max(
+        1,
+        int(overlay_cfg.get("downsample_full", 1)),
+    )
+    overlay_zoom_enabled = bool(overlay_cfg.get("zoom_enabled", False))
+    overlay_zoom_box = overlay_cfg.get("zoom_box", None)
     t_load0 = time.perf_counter()
     t_prep = 0.0
     t_white = 0.0
@@ -632,33 +640,34 @@ def load_inputs(cfg: dict) -> dict:
         _log(f"After crop: white shape={white.shape}")
         _log(f"After crop: first band shape={next(iter(image_dict.values()))['img_scaled'].shape}")
 
-        try:
-            _log("Generating post-crop white diagnostic plot...")
-            ds_post = max(1, int(crop_cfg.get("post_crop_display_downsample", 1)))
-            white_show = np.asarray(white)[::ds_post, ::ds_post]
-            m = np.isfinite(white_show)
-            if np.any(m):
-                vmin, vmax = ZScaleInterval().get_limits(white_show[m])
-            else:
-                vmin, vmax = None, None
-            fig, ax = plt.subplots(figsize=(10, 7), constrained_layout=True)
-            ax.imshow(
-                white_show,
-                origin="lower",
-                cmap="gray",
-                vmin=vmin,
-                vmax=vmax,
-                interpolation="nearest",
-                extent=(0, white.shape[1] - 1, 0, white.shape[0] - 1),
-                rasterized=True,
-            )
-            ax.set_title(f"White AFTER crop (DS={ds_post})")
-            ax.set_xticks([])
-            ax.set_yticks([])
-            plt.savefig(crop_out / "white_after_crop.png", dpi=int(cfg.get("plotting", {}).get("dpi", 150)))
-            plt.close(fig)
-        except Exception as e:
-            _log(f"[WARN] Could not plot post-crop white: {e}")
+        if crop_cfg.get("plot_post_crop", True):
+            try:
+                _log("Generating post-crop white diagnostic plot...")
+                ds_post = max(1, int(crop_cfg.get("post_crop_display_downsample", 1)))
+                white_show = np.asarray(white)[::ds_post, ::ds_post]
+                m = np.isfinite(white_show)
+                if np.any(m):
+                    vmin, vmax = ZScaleInterval().get_limits(white_show[m])
+                else:
+                    vmin, vmax = None, None
+                fig, ax = plt.subplots(figsize=(10, 7), constrained_layout=True)
+                ax.imshow(
+                    white_show,
+                    origin="lower",
+                    cmap="gray",
+                    vmin=vmin,
+                    vmax=vmax,
+                    interpolation="nearest",
+                    extent=(0, white.shape[1] - 1, 0, white.shape[0] - 1),
+                    rasterized=True,
+                )
+                ax.set_title(f"White AFTER crop (DS={ds_post})")
+                ax.set_xticks([])
+                ax.set_yticks([])
+                plt.savefig(crop_out / "white_after_crop.png", dpi=int(cfg.get("plotting", {}).get("dpi", 150)))
+                plt.close(fig)
+            except Exception as e:
+                _log(f"[WARN] Could not plot post-crop white: {e}")
         t_crop = time.perf_counter() - t0_crop
 
     if bool(sat_cut_cfg.get("enabled", False)):
@@ -681,7 +690,7 @@ def load_inputs(cfg: dict) -> dict:
     n_active = int((~input_catalog["excluded_any"]).sum())
     _log(f"Active (non-excluded) sources: {n_active}/{len(input_catalog)}")
 
-    if crop_cfg.get("overlay_catalog", True):
+    if overlay_enabled:
         t0_overlay = time.perf_counter()
         _log("Generating white+catalog overlay plot...")
         wcs_white = next(iter(image_dict.values()))["wcs"]
@@ -736,7 +745,7 @@ def load_inputs(cfg: dict) -> dict:
                 x_sat = _sx[_sinb]
                 y_sat = _sy[_sinb]
 
-        DS_FULL = int(crop_cfg.get("overlay_downsample_full", 1))
+        DS_FULL = int(overlay_downsample_full)
 
         def _plot_white_with_overlay(*, white_arr: np.ndarray, extent: tuple[float, float, float, float], xlim, ylim, title: str):
             interval = ZScaleInterval()
@@ -831,7 +840,8 @@ def load_inputs(cfg: dict) -> dict:
             ax.legend(loc="upper right", frameon=True, fontsize=12)
             return fig
 
-        white_full = np.asarray(white)[::DS_FULL, ::DS_FULL]
+        white_native = np.asarray(white, dtype=np.float32)
+        white_full = white_native[::DS_FULL, ::DS_FULL]
         fig = _plot_white_with_overlay(
             white_arr=white_full,
             extent=(0, W - 1, 0, H - 1),
@@ -839,16 +849,81 @@ def load_inputs(cfg: dict) -> dict:
             ylim=(0, H - 1),
             title=None,
         )
+        overlay_out = outputs["overlay_dir"]
+        overlay_out.mkdir(parents=True, exist_ok=True)
         try:
-            outpath = outputs["cropped_images_dir"] / "white_overlay.png"
+            outpath = overlay_out / "white_overlay.png"
             fig.savefig(outpath, dpi=int(cfg.get("plotting", {}).get("dpi", 150)))
         finally:
             plt.close(fig)
+
+        if overlay_zoom_enabled:
+            try:
+                if not isinstance(overlay_zoom_box, (list, tuple)) or len(overlay_zoom_box) != 4:
+                    raise ValueError("overlay.zoom_box must be [x0, x1, y0, y1]")
+                zx0, zx1, zy0, zy1 = [int(v) for v in overlay_zoom_box]
+                if zx1 <= zx0 or zy1 <= zy0:
+                    raise ValueError(
+                        f"overlay.zoom_box must satisfy x1>x0 and y1>y0, got {[zx0, zx1, zy0, zy1]}"
+                    )
+
+                zoom_w = int(zx1 - zx0)
+                zoom_h = int(zy1 - zy0)
+                zoom_arr = np.full((zoom_h, zoom_w), np.nan, dtype=np.float32)
+
+                src_x0 = max(0, zx0)
+                src_x1 = min(W, zx1)
+                src_y0 = max(0, zy0)
+                src_y1 = min(H, zy1)
+                if src_x1 > src_x0 and src_y1 > src_y0:
+                    dst_x0 = int(src_x0 - zx0)
+                    dst_x1 = int(dst_x0 + (src_x1 - src_x0))
+                    dst_y0 = int(src_y0 - zy0)
+                    dst_y1 = int(dst_y0 + (src_y1 - src_y0))
+                    zoom_arr[dst_y0:dst_y1, dst_x0:dst_x1] = white_native[src_y0:src_y1, src_x0:src_x1]
+
+                fig_zoom = _plot_white_with_overlay(
+                    white_arr=zoom_arr,
+                    extent=(zx0, zx1 - 1, zy0, zy1 - 1),
+                    xlim=(zx0, zx1 - 1),
+                    ylim=(zy0, zy1 - 1),
+                    title=f"Overlay zoom [{zx0}:{zx1}, {zy0}:{zy1}]",
+                )
+                try:
+                    outpath_zoom = overlay_out / "white_overlay_zoom.png"
+                    fig_zoom.savefig(outpath_zoom, dpi=int(cfg.get("plotting", {}).get("dpi", 150)))
+                finally:
+                    plt.close(fig_zoom)
+            except Exception as e:
+                _log(f"[WARN] Could not generate white overlay zoom plot: {e}")
         t_overlay = time.perf_counter() - t0_overlay
 
     wcs_fits = None
     if image_dict:
-        wcs_fits = next(iter(image_dict.values())).get("fp", None)
+        first_band = next(iter(image_dict.values()))
+        try:
+            # x_pix_white(_fit) is in the current white-frame coordinates
+            # (post-crop when crop is enabled). Persist a matching WCS snapshot
+            # so merge computes RA/DEC in the same pixel frame.
+            merge_wcs_path = Path(outputs["work_dir"]) / "wcs.fits"
+            merge_wcs_path.parent.mkdir(parents=True, exist_ok=True)
+
+            wcs_obj = first_band.get("wcs", None)
+            if wcs_obj is None:
+                raise RuntimeError("missing first-band WCS object")
+            hdr = wcs_obj.to_header(relax=True)
+            # Keep this file tiny: only header fidelity matters for WCS transforms.
+            fits.PrimaryHDU(data=np.zeros((1, 1), dtype=np.uint8), header=hdr).writeto(
+                merge_wcs_path,
+                overwrite=True,
+            )
+            wcs_fits = str(merge_wcs_path)
+            _log(f"Saved WCS snapshot: {wcs_fits}")
+        except Exception as e:
+            raise RuntimeError(
+                "Failed to save runtime WCS snapshot (wcs.fits). "
+                "This snapshot is required to compute RA_fit/DEC_fit in the working pixel frame."
+            ) from e
 
     state = dict(
         input_catalog=input_catalog,
@@ -1093,9 +1168,12 @@ def merge_results(cfg: dict, state: dict | None = None) -> Path:
     outputs = cfg["outputs"]
     merge_cfg = cfg["merge"]
 
-    wcs_fits = merge_cfg.get("wcs_fits")
-    if wcs_fits is None and state is not None:
-        wcs_fits = state.get("wcs_fits")
+    wcs_fits = state.get("wcs_fits") if state is not None else None
+    if not wcs_fits:
+        raise RuntimeError(
+            "Missing runtime WCS snapshot path in pipeline state. "
+            "Run load_inputs() in the current pipeline run so wcs.fits is generated."
+        )
 
     input_catalog_path = Path(cfg["inputs"]["input_catalog"])
     if state is not None and "augmented_catalog_path" in state:
@@ -1105,7 +1183,7 @@ def merge_results(cfg: dict, state: dict | None = None) -> Path:
         patch_outdir=outputs["tractor_out_dir"],
         out_path=outputs["final_catalog"],
         pattern=str(merge_cfg["pattern"]),
-        wcs_fits=Path(wcs_fits) if wcs_fits else None,
+        wcs_fits=Path(wcs_fits),
     )
 
 

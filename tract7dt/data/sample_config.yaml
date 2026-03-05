@@ -19,7 +19,8 @@ inputs:
 
 outputs:
   work_dir: "path/to/work_dir"         # Path to base work & output directory.
-  cropped_images_dir: "cropped_images" # Path to PNGs from crop + source overlay plots.
+  cropped_images_dir: "cropped_images" # Path to PNGs from crop diagnostic plots.
+  overlay_dir: "overlay"               # Path to white_overlay*.png plots.
   epsf_dir: "EPSFs"                    # Path to EPSF outputs (epsf.npy, meta, pngs).
   patches_dir: "patches"               # Path to Patch definitions (patches.csv/json).
   patch_inputs_dir: "patch_payloads"   # Path to Patch payloads (*.pkl.gz).
@@ -33,13 +34,15 @@ crop:
   enabled: true                        # Crop away noisy edges.
   margin: 500                          # Crop margin in pixels.
   plot_pre_crop: true                  # Save pre-crop white image with crop box.
+  plot_post_crop: true                 # Save post-crop white image.
   display_downsample: 4                # Downsample for pre-crop plot.
   post_crop_display_downsample: 4      # Downsample for post-crop white plot.
-  overlay_catalog: true                # Overlay catalog positions on white image.
-  overlay_downsample_full: 4           # Downsample for overlay plot.
-  overlay_downsample_crop: 4           # Reserved (not used in reference).
-#  overlay_crop_box: [4000, 5000, 4000, 5000] # Example zoom region.
-#  overlay_crop_enabled: true           # Reserved (not used in reference).
+
+overlay:
+  enabled: true                        # Save white_overlay.png with catalog markers.
+  downsample_full: 4                   # Downsample factor for white_overlay.png.
+  zoom_enabled: true                   # Save white_overlay_zoom.png for a pixel-region cutout.
+  zoom_box: [4000, 5000, 4000, 5000]  # [x0, x1, y0, y1] in current working white-frame pixels (post-crop if crop enabled, full-frame if crop disabled).
 
 checks:
   require_wcs_alignment: true          # Enforce WCS alignment across input images.
@@ -168,7 +171,6 @@ moffat_psf:
 
 merge:
   pattern: "*_cat_fit.csv"             # Patch catalog glob.
-  wcs_fits: null                       # Optional FITS for RA_fit/DEC_fit.
 
 zp:
   enabled: true                        # Enable zero-point calibration using GaiaXP synphot sources.

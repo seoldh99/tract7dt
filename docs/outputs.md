@@ -38,10 +38,13 @@ work_dir/
 │       └── cutouts/
 │           ├── src_{ID}.png                # Per-source montage (named by source ID)
 │           └── ...
-├── cropped_images/           # Diagnostic plots
+├── cropped_images/           # Crop diagnostic plots
 │   ├── white_before_crop.png
-│   ├── white_after_crop.png
-│   └── white_overlay.png
+│   └── white_after_crop.png
+├── overlay/                  # White-stack overlay plots
+│   ├── white_overlay.png
+│   └── white_overlay_zoom.png
+├── wcs.fits                  # Runtime WCS snapshot (working pixel frame)
 ├── ZP/                       # Zero-point calibration (if zp.enabled)
 │   ├── input_catalog_*_with_Gaia.csv  # Augmented input catalog
 │   ├── gaia_augmentation_overlay.png  # Source selection overlay
@@ -249,9 +252,11 @@ When `zp.enabled: true`, the ZP computation stage adds these columns for each ba
 
 | File | Description |
 |------|-------------|
-| `cropped_images/white_before_crop.png` | White-stack image with crop box overlaid (green rectangle). Generated before crop is applied. |
-| `cropped_images/white_after_crop.png` | White-stack image after crop. |
-| `cropped_images/white_overlay.png` | Post-crop white stack with source positions color-coded by TYPE: cyan=STAR, magenta=GAL/EXP/DEV/SERSIC, yellow squares=UNKNOWN, red X=saturation-excluded, gray=crop-excluded (legend only). |
+| `cropped_images/white_before_crop.png` | White-stack image with crop box overlaid (green rectangle). Generated before crop is applied. Only when `crop.enabled: true` and `crop.plot_pre_crop: true`. |
+| `cropped_images/white_after_crop.png` | White-stack image after crop. Only when `crop.enabled: true` and `crop.plot_post_crop: true`. |
+| `overlay/white_overlay.png` | Current working white stack with source positions color-coded by TYPE: cyan=STAR, magenta=GAL/EXP/DEV/SERSIC, yellow squares=UNKNOWN, red X=saturation-excluded, gray=crop-excluded (legend only). Generated when `overlay.enabled: true`, regardless of `crop.enabled`. |
+| `overlay/white_overlay_zoom.png` | Zoomed region of the overlay. Generated when `overlay.zoom_enabled: true`. Out-of-bounds areas are blank-filled. |
+| `wcs.fits` | Runtime WCS snapshot in the working pixel frame (post-crop if crop enabled, full-frame otherwise). Used by merge to compute `RA_fit`/`DEC_fit`. |
 
 ### Patch Overview
 
@@ -301,7 +306,7 @@ The merge stage:
 3. Collects all `*_cat_fit.csv` files from per-patch output directories.
 4. Concatenates fit results and handles duplicate merge keys (drops duplicates with a warning; rare boundary sources may appear in two patches).
 5. Performs a **left join**: `base_catalog.merge(fit_results, how="left", on=key_cols)`.
-6. Optionally computes sky coordinates from fitted pixel positions using WCS from `merge.wcs_fits` or the first loaded image. In multi-band mode: `RA_fit`/`DEC_fit`. In single-band mode: `RA_{band}_fit`/`DEC_{band}_fit` for each band.
+6. Computes sky coordinates from fitted pixel positions using the runtime WCS snapshot (`wcs.fits`) generated during `load_inputs()`. In multi-band mode: `RA_fit`/`DEC_fit`. In single-band mode: `RA_{band}_fit`/`DEC_{band}_fit` for each band.
 
 ### Merge Key Selection
 

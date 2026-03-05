@@ -101,7 +101,8 @@ load_inputs timing [s]: prep=X.XX white=X.XX crop=X.XX sat=X.XX overlay=X.XX tot
 
 - Increase `performance.frame_prep_workers` (but watch memory).
 - Increase `performance.white_stack_workers`.
-- Reduce diagnostic plot resolution: `crop.display_downsample`, `crop.post_crop_display_downsample`, `crop.overlay_downsample_full`.
+- Reduce diagnostic plot resolution: `crop.display_downsample`, `crop.post_crop_display_downsample`, `overlay.downsample_full`.
+- Disable selected plots if needed: `crop.plot_pre_crop`, `crop.plot_post_crop`, `overlay.enabled`, `overlay.zoom_enabled`.
 
 ---
 

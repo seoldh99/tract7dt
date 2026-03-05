@@ -18,9 +18,8 @@ Understanding how relative paths are resolved is critical:
 | `inputs.gaiaxp_synphot_csv` | YAML config file directory |
 | `outputs.work_dir` | YAML config file directory |
 | `outputs.*` (all others) | `outputs.work_dir` |
-| `merge.wcs_fits` | YAML config file directory |
 | `moffat_psf.module_path` | YAML config file directory |
-| `logging.file` | YAML config file directory |
+| `logging.file` | `outputs.work_dir` |
 
 Absolute paths are always used as-is. All relative paths are expanded with `Path.expanduser()` and resolved to absolute paths during config loading.
 
@@ -33,7 +32,8 @@ The YAML file is organized into these sections:
 | [`inputs`](#inputs) | Paths to input data (catalog, images, GaiaXP) |
 | [`outputs`](#outputs) | Paths to output directories and files |
 | [`image_scaling`](#image_scaling) | Photometric scaling parameters |
-| [`crop`](#crop) | Edge-crop filtering and diagnostic plots |
+| [`crop`](#crop) | Edge-crop filtering and white crop diagnostics |
+| [`overlay`](#overlay) | White-stack + catalog overlay diagnostics |
 | [`checks`](#checks) | WCS and shape validation controls |
 | [`source_saturation_cut`](#source_saturation_cut) | Pre-fit saturation-based source flagging |
 | [`logging`](#logging) | Python logging configuration |
@@ -72,7 +72,8 @@ Paths to output directories and files. All paths except `work_dir` are resolved 
 | `patch_inputs_dir` | path | `"patch_payloads"` | Directory for compressed patch payloads (`*.pkl.gz`). |
 | `tractor_out_dir` | path | `"outputs"` | Directory for per-patch Tractor fit outputs. |
 | `final_catalog` | path | `"output_catalog.csv"` | Path for the merged final catalog CSV. |
-| `cropped_images_dir` | path | `"cropped_images"` | Directory for white-stack and overlay diagnostic PNGs. |
+| `cropped_images_dir` | path | `"cropped_images"` | Directory for crop diagnostic PNGs. |
+| `overlay_dir` | path | `"overlay"` | Directory for white overlay PNGs (`white_overlay.png`, `white_overlay_zoom.png`). |
 
 ## `image_scaling`
 
@@ -82,20 +83,27 @@ Paths to output directories and files. All paths except `work_dir` are resolved 
 
 ## `crop`
 
-Controls the removal of noisy edge regions (common in stacked images) and associated diagnostic plots.
+Controls the removal of noisy edge regions (common in stacked images) and crop-specific diagnostic plots.
 
 | Key | Type | Default | Unit | Description |
 |-----|------|---------|------|-------------|
 | `enabled` | bool | `true` | — | Enable edge-crop filtering. When true, a margin is removed from all edges of the white stack and per-band arrays. Sources outside the crop box are **flagged** with `excluded_crop = True` and excluded from fitting. |
 | `margin` | int | `500` | pixels | Width of the edge strip to remove on each side. The crop box is `[margin, W-margin) x [margin, H-margin)`. |
 | `plot_pre_crop` | bool | `true` | — | Save a pre-crop white-stack diagnostic PNG with crop box overlay. |
+| `plot_post_crop` | bool | `true` | — | Save the post-crop white-stack diagnostic PNG (`white_after_crop.png`). |
 | `display_downsample` | int | `4` | factor | Downsampling factor for the pre-crop white diagnostic plot (reduces rendering time and file size). |
 | `post_crop_display_downsample` | int | `4` | factor | Downsampling factor for the post-crop white diagnostic plot. |
-| `overlay_catalog` | bool | `true` | — | Render a white-stack + source overlay plot color-coded by TYPE. |
-| `overlay_downsample_full` | int | `4` | factor | Downsampling factor for the full-field overlay plot. |
-| `overlay_downsample_crop` | int | `4` | factor | Reserved for future zoomed overlay rendering. |
-| `overlay_crop_box` | list of 4 int | `[4000, 5000, 4000, 5000]` | pixels `[x0, x1, y0, y1]` | Reserved zoom region for overlay. |
-| `overlay_crop_enabled` | bool | `true` | — | Reserved. |
+
+## `overlay`
+
+Controls white-stack overlay plot output (`white_overlay.png`) independently of crop enable/disable.
+
+| Key | Type | Default | Unit | Description |
+|-----|------|---------|------|-------------|
+| `enabled` | bool | `true` | — | Save white-stack + catalog overlay plot (`white_overlay.png`). Works whether `crop.enabled` is true or false. |
+| `downsample_full` | int | `4` | factor | Downsampling factor for the overlay plot. |
+| `zoom_enabled` | bool | `true` | — | Also save a zoomed overlay image (`white_overlay_zoom.png`) for `zoom_box`. |
+| `zoom_box` | list of 4 int | `[4000, 5000, 4000, 5000]` | pixels `[x0, x1, y0, y1]` | Pixel region to render for zoom overlay, in the current working white-frame coordinates (post-crop when `crop.enabled: true`, full-frame when `crop.enabled: false`). If part of the box lies outside the current white frame, out-of-bounds area is rendered as blank. |
 
 ## `checks`
 
@@ -266,7 +274,8 @@ Controls how per-patch fit results are joined back to the base catalog (augmente
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `pattern` | string | `"*_cat_fit.csv"` | Glob pattern to find per-patch fit CSV files under `outputs.tractor_out_dir`. |
-| `wcs_fits` | path or null | `null` | Optional FITS file whose WCS is used to compute sky coordinates from fitted pixel positions (`RA_fit`/`DEC_fit` in multi-band mode; `RA_{band}_fit`/`DEC_{band}_fit` in single-band mode). If null, uses the WCS from the first loaded image. |
+
+`RA_fit`/`DEC_fit` are computed using the runtime WCS snapshot `wcs.fits` generated during `load_inputs()`.
 
 ## `plotting`
 

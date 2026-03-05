@@ -21,6 +21,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "tractor_out_dir": "outputs",
         "final_catalog": "output_catalog.csv",
         "cropped_images_dir": "cropped_images",
+        "overlay_dir": "overlay",
     },
     "image_scaling": {
         "zp_ref": 25.0,
@@ -29,13 +30,15 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "enabled": True,
         "margin": 500,
         "plot_pre_crop": True,
+        "plot_post_crop": True,
         "display_downsample": 4,
         "post_crop_display_downsample": 4,
-        "overlay_catalog": True,
-        "overlay_downsample_full": 4,
-        "overlay_downsample_crop": 4,
-        "overlay_crop_box": [4000, 5000, 4000, 5000],
-        "overlay_crop_enabled": True,
+    },
+    "overlay": {
+        "enabled": True,
+        "downsample_full": 4,
+        "zoom_enabled": True,
+        "zoom_box": [4000, 5000, 4000, 5000],
     },
     "checks": {
         "require_wcs_alignment": True,
@@ -165,7 +168,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "merge": {
         "pattern": "*_cat_fit.csv",
-        "wcs_fits": None,
     },
     "zp": {
         "enabled": True,
@@ -225,7 +227,6 @@ def _validate_config_types(cfg: dict[str, Any], defaults: dict[str, Any], prefix
         "performance.white_stack_workers": (int, str),
         "patch_run.cutout_max_sources": (int, type(None)),
         "moffat_psf.module_path": (str, Path, type(None)),
-        "merge.wcs_fits": (str, Path, type(None)),
         "logging.file": (str, Path, type(None)),
     }
     for k, d in defaults.items():
@@ -298,10 +299,7 @@ def load_config(config_path: str | Path) -> dict[str, Any]:
     outputs["tractor_out_dir"] = _resolve_path(outputs["tractor_out_dir"], work_dir)
     outputs["final_catalog"] = _resolve_path(outputs["final_catalog"], work_dir)
     outputs["cropped_images_dir"] = _resolve_path(outputs["cropped_images_dir"], work_dir)
-
-    merge_cfg = cfg["merge"]
-    if merge_cfg.get("wcs_fits"):
-        merge_cfg["wcs_fits"] = _resolve_path(merge_cfg["wcs_fits"], cfg_dir)
+    outputs["overlay_dir"] = _resolve_path(outputs["overlay_dir"], work_dir)
 
     moffat_cfg = cfg["moffat_psf"]
     if moffat_cfg.get("module_path"):

@@ -46,7 +46,14 @@ If diagnostics are costly:
 
 - `crop.display_downsample` (pre-crop white)
 - `crop.post_crop_display_downsample` (post-crop white)
-- `crop.overlay_downsample_full` (overlay plot)
+- `overlay.downsample_full` (overlay plot)
+
+**On/off controls** (skip plot generation entirely):
+
+- `crop.plot_pre_crop: false`
+- `crop.plot_post_crop: false`
+- `overlay.enabled: false`
+- `overlay.zoom_enabled: false`
 
 **ePSF diagnostic toggles** (disable to skip plot generation entirely):
 

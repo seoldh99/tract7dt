@@ -91,7 +91,9 @@ If `crop.enabled: true`:
 2. Project all source RA/DEC to pixel coordinates using the first image's WCS.
 3. Sources outside the crop box are **flagged** with `excluded_crop = True`. They remain in the catalog but are excluded from downstream fitting.
 4. Slice the white stack, per-band images, masks, sigma arrays, and WCS to the crop region.
-5. Generate diagnostic plots (pre-crop, post-crop).
+5. Generate crop diagnostics:
+   - pre-crop plot if `crop.plot_pre_crop: true`
+   - post-crop plot if `crop.plot_post_crop: true`
 
 ### 1.7 Apply Saturation Filter (if enabled)
 
@@ -108,16 +110,22 @@ After both crop and saturation filtering, a composite flag `excluded_any = exclu
 
 ### 1.8 Render Overlay Plot
 
-If `crop.overlay_catalog: true`:
+If `overlay.enabled: true`:
 
-- Render the post-crop white stack with source positions color-coded by `TYPE`:
+- Render the current white stack (post-crop if crop enabled, full-frame if crop disabled) with source positions color-coded by `TYPE`:
   - **Cyan circles** — `STAR`
   - **Magenta circles** — `GAL`, `EXP`, `DEV`, `SERSIC`
   - **Yellow squares** — unknown/missing type (labeled with fallback model)
   - **Red X markers** — saturation-excluded sources
   - **Gray markers** (legend only) — crop-excluded sources, NaN/out-of-bounds sources
+- Save `white_overlay.png`.
+- If `overlay.zoom_enabled: true`, also save `white_overlay_zoom.png` for `overlay.zoom_box`. Areas of the zoom box outside the current white frame are blank-filled.
 
-### 1.9 Timing Summary
+### 1.9 Save WCS Snapshot
+
+After all filtering and overlay steps, the pipeline saves `wcs.fits` into `work_dir`. This file contains the WCS of the current working pixel frame (post-crop when `crop.enabled: true`, full-frame otherwise). It is used by the merge stage to compute `RA_fit`/`DEC_fit` from fitted pixel positions. If this file cannot be written, the pipeline raises a `RuntimeError`.
+
+### 1.10 Timing Summary
 
 The stage logs a timing breakdown:
 
@@ -330,7 +338,7 @@ Combines all per-patch fit results into a single catalog.
 5. Concatenate all patch catalogs.
 6. Check for duplicate merge keys. Duplicates are dropped (keeping first occurrence) with a warning; this can occur for sources on patch boundaries.
 7. Left-join the base catalog with fit results.
-8. Optionally compute sky coordinates from fitted pixel positions using WCS. In multi-band mode: `RA_fit`/`DEC_fit` from `x_pix_white_fit`/`y_pix_white_fit`. In single-band mode: `RA_{band}_fit`/`DEC_{band}_fit` from `x_pix_white_{band}_fit`/`y_pix_white_{band}_fit` for each band.
+8. Compute sky coordinates from fitted pixel positions using the runtime WCS snapshot (`wcs.fits`). In multi-band mode: `RA_fit`/`DEC_fit` from `x_pix_white_fit`/`y_pix_white_fit`. In single-band mode: `RA_{band}_fit`/`DEC_{band}_fit` from `x_pix_white_{band}_fit`/`y_pix_white_{band}_fit` for each band.
 9. Write the final catalog.
 
 ### Exclusion Columns

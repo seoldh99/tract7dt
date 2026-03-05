@@ -226,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--patch-outdir", required=True, help="Base output directory containing per-patch results")
     ap.add_argument("--out", required=True, help="Output merged CSV path")
     ap.add_argument("--pattern", default="*_cat_fit.csv", help="Glob pattern for patch result CSVs")
-    ap.add_argument("--wcs-fits", default=None, help="Optional FITS path for RA_fit/DEC_fit")
+    ap.add_argument("--wcs-fits", required=True, help="Path to wcs.fits (runtime WCS snapshot from load_inputs)")
     args = ap.parse_args(argv)
 
     merge_catalogs(
@@ -234,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
         patch_outdir=Path(args.patch_outdir),
         out_path=Path(args.out),
         pattern=str(args.pattern),
-        wcs_fits=Path(args.wcs_fits) if args.wcs_fits else None,
+        wcs_fits=Path(args.wcs_fits),
     )
     return 0
 
